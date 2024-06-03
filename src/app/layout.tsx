@@ -9,8 +9,8 @@ import Header from '@/components/header';
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: 'RepoMapper',
-  description: 'Turn your github repo into a visual folder structure.',
+  title: 'Un-Fork Repo',
+  description: 'Unlink the parent from your forked github repository.',
 };
 
 export default function RootLayout({

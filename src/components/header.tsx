@@ -12,7 +12,7 @@ export default function Header() {
       <span className="h-8 w-8 flex items-center justify-center bg-black rounded-lg">
         <FolderTree size={20} color="white" />
       </span>
-      <h1 className="font-bold text-2xl">RepoMapper</h1>
+      <h1 className="font-bold text-2xl">Un-Fork Repo</h1>
     </Link>
   );
 }

@@ -62,12 +62,10 @@ export default function Hero() {
     <div className="flex flex-col space-y-6 space-x-0 md:space-y-0 md:flex-row md:space-x-2 md:justify-between mt-10 items-center">
       <div className="flex flex-col text-center text-balance items-center sm:text-start sm:items-start">
         <span className="text-3xl md:text-5xl font-bold">
-          Visualize Your GitHub Repos in ASCII.
+          De-Link Your Forked GitHub Repos.
         </span>
         <span className="text-neutral-700 text-lg mt-2">
-          RepoMapper converts your GitHub repository into clear ASCII diagrams,
-          enhancing documentation and code organization understanding with an
-          invaluable visualization tool.
+          Unforker removes the parent link and trace of root from your forked GitHub repository, allowing you flex this repo as your own or make it private.
         </span>
         <div>
           <Button
