@@ -72,35 +72,21 @@ export default function ProjectPage({ params }: { params: { slug: string } }){
       setError('');
       setMessage('');
 
-      // Step 1: Create new repository
-      const createRepoResponse = await axios.post('/api/createRepo', {
-        accessToken: session.accessToken,
-        owner,
-        repoName: params.slug + '-unforked',
-        isPrivate: false,
-      });
-
-      if (!createRepoResponse.data.success) {
-        setError('Failed to create new repository.');
-        setLoading(false);
-        return;
-      }
-
-      // Step 2: Clone and push to new repository
-      const cloneAndPushResponse = await axios.post('/api/cloneAndPush', {
+      // Step 1: Migrate repository contents to the new repository
+      const migrateRepoResponse = await axios.post('/api/migrateRepo', {
         owner,
         repoName: params.slug,
         accessToken: session.accessToken,
-        newRepoUrl: createRepoResponse.data.repoUrl,
+        newRepoName: params.slug + '-delinked',
       });
 
-      if (!cloneAndPushResponse.data.success) {
-        setError('Failed to clone and push to the new repository.');
+      if (!migrateRepoResponse.data.success) {
+        setError(`Failed to migrate repository contents. ${migrateRepoResponse.data.message}`);
         setLoading(false);
         return;
       }
 
-      // Step 3: Delete the original repository
+      // Step 2: Delete the original repository
       await axios.delete(`https://api.github.com/repos/${owner}/${params.slug}`, {
         headers: {
           Authorization: `Bearer ${session.accessToken}`,
@@ -108,7 +94,7 @@ export default function ProjectPage({ params }: { params: { slug: string } }){
         },
       });
 
-      // Step 4: Rename the new repository
+      // Step 3: Rename the new repository
       const renameRepoResponse = await axios.post('/api/renameRepo', {
         owner,
         oldRepoName: params.slug + '-unforked',
