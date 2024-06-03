@@ -5,18 +5,16 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import CodeSnippet from '@/components/code-snippet';
 import axios from 'axios';
-import { ArrowLeft, Star } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 import { useSession } from 'next-auth/react';
 
-const parseRepoData = (data: any[], prefix: string = '') => {
+const parseRepoData = (data: any[], prefix = '') => {
   let structure = '';
 
-  data.forEach((item) => {
+  data.forEach((item: { type: string; name: any; contents: any; }) => {
     if (item.type === 'dir') {
       // For directories
       structure += `${prefix}├── ${item.name}\n`;
-      // Placeholder for nested directory contents
-      // Assuming `item.contents` holds an array of contents if they were fetched
       if (item.contents) {
         structure += parseRepoData(item.contents, prefix + '|   ');
       }
@@ -29,7 +27,7 @@ const parseRepoData = (data: any[], prefix: string = '') => {
   return structure;
 };
 
-export default function ProjectPage({ params }: { params: { slug: string } }) {
+export default function ProjectPage({ params }: { params: { slug: string } }){
   const { data: session } = useSession();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -58,7 +56,9 @@ export default function ProjectPage({ params }: { params: { slug: string } }) {
       }
     }
 
-    fetchGithubRepo();
+    if (session && owner && params.slug) {
+      fetchGithubRepo();
+    }
   }, [session, owner, params]);
 
   const handleUnFork = async () => {
@@ -69,6 +69,9 @@ export default function ProjectPage({ params }: { params: { slug: string } }) {
 
     try {
       setLoading(true);
+      setError('');
+      setMessage('');
+
       const createRepoResponse = await axios.post('/api/createRepo', {
         accessToken: session.accessToken,
         owner,
@@ -77,14 +80,18 @@ export default function ProjectPage({ params }: { params: { slug: string } }) {
       });
 
       if (createRepoResponse.data.success) {
-        await axios.post('/api/cloneAndPush', {
+        const cloneAndPushResponse = await axios.post('/api/cloneAndPush', {
           owner,
           repoName: params.slug,
           accessToken: session.accessToken,
           newRepoUrl: createRepoResponse.data.repoUrl,
         });
 
-        setMessage('Repository successfully unforked!');
+        if (cloneAndPushResponse.data.success) {
+          setMessage('Repository successfully unforked!');
+        } else {
+          setError('Failed to clone and push to the new repository.');
+        }
       } else {
         setError('Failed to create new repository.');
       }
@@ -103,7 +110,7 @@ export default function ProjectPage({ params }: { params: { slug: string } }) {
       <Link href="/" className="flex group flex-row space-x-1 items-center">
         <ArrowLeft
           size={16}
-          className="group-hover:-translate-x-1 duration-200 "
+          className="group-hover:-translate-x-1 duration-200"
         />
         <span>Back</span>
       </Link>
