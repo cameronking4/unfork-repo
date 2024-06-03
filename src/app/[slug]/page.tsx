@@ -1,10 +1,8 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-
 import CodeSnippet from '@/components/code-snippet';
 import axios from 'axios';
 import { ArrowLeft, Star } from 'lucide-react';
@@ -38,30 +36,71 @@ export default function ProjectPage({ params }: { params: { slug: string } }) {
   const searchParams = useSearchParams();
   const owner = searchParams.get('owner');
   const [repoStructure, setRepoStructure] = useState('');
+  const [message, setMessage] = useState('');
 
   useEffect(() => {
     async function fetchGithubRepo() {
-      const response = await axios.post('/api/repo', {
-        owner: owner,
-        repoName: params.slug,
-        token: session?.accessToken,
-      });
+      try {
+        setLoading(true);
+        const response = await axios.post('/api/repo', {
+          owner: owner,
+          repoName: params.slug,
+          token: session?.accessToken,
+        });
 
-      const respoData = response.data;
-
-      const structure = parseRepoData(respoData);
-      setRepoStructure(structure);
+        const respoData = response.data;
+        const structure = parseRepoData(respoData);
+        setRepoStructure(structure);
+        setLoading(false);
+      } catch (error) {
+        setError('Failed to fetch repository data');
+        setLoading(false);
+      }
     }
 
     fetchGithubRepo();
   }, [session, owner, params]);
+
+  const handleUnFork = async () => {
+    if (!session) {
+      setError('You must be logged in to perform this action.');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const createRepoResponse = await axios.post('/api/createRepo', {
+        accessToken: session.accessToken,
+        owner,
+        repoName: params.slug + '-unforked',
+        isPrivate: false, // Or true, depending on your requirement
+      });
+
+      if (createRepoResponse.data.success) {
+        await axios.post('/api/cloneAndPush', {
+          owner,
+          repoName: params.slug,
+          accessToken: session.accessToken,
+          newRepoUrl: createRepoResponse.data.repoUrl,
+        });
+
+        setMessage('Repository successfully unforked!');
+      } else {
+        setError('Failed to create new repository.');
+      }
+      setLoading(false);
+    } catch (error) {
+      setError('An error occurred during the un-forking process.');
+      setLoading(false);
+    }
+  };
 
   if (loading) return <div>Loading...</div>;
   if (error) return <div>Error: {error}</div>;
 
   return (
     <div className="flex w-full flex-col py-8 space-y-6">
-      <Link href="/" className="flex  group flex-row space-x-1 items-center">
+      <Link href="/" className="flex group flex-row space-x-1 items-center">
         <ArrowLeft
           size={16}
           className="group-hover:-translate-x-1 duration-200 "
@@ -71,6 +110,13 @@ export default function ProjectPage({ params }: { params: { slug: string } }) {
       <span className="font-bold text-xl">{params.slug}</span>
       <div className="w-full flex flex-col items-center justify-center sm:items-start">
         <CodeSnippet code={repoStructure} width="w-full" />
+        <button
+          onClick={handleUnFork}
+          className="mt-4 bg-blue-500 text-white px-4 py-2 rounded"
+        >
+          Un-Fork Repository
+        </button>
+        {message && <p className="mt-4 text-green-500">{message}</p>}
       </div>
     </div>
   );
