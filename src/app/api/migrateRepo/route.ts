@@ -2,8 +2,9 @@ import { NextResponse } from 'next/server';
 import axios from 'axios';
 
 async function migrateRepo(owner: string, repoName: string, accessToken: string, newRepoName: string) {
-  try { 
+  try {
     // Step 1: Create new repository
+    console.log(`Creating new repository: ${newRepoName}`);
     const createRepoResponse = await axios.post(
       'https://api.github.com/user/repos',
       {
@@ -19,8 +20,10 @@ async function migrateRepo(owner: string, repoName: string, accessToken: string,
     );
 
     const newRepoUrl = createRepoResponse.data.clone_url;
+    console.log(`New repository created: ${newRepoUrl}`);
 
     // Step 2: Use GitHub's Import API to migrate the repository
+    console.log(`Starting repository import from ${repoName} to ${newRepoName}`);
     const importRepoResponse = await axios.put(
       `https://api.github.com/repos/${owner}/${newRepoName}/import`,
       {
@@ -35,6 +38,8 @@ async function migrateRepo(owner: string, repoName: string, accessToken: string,
       }
     );
 
+    console.log(`Import initiated: ${importRepoResponse.status}`);
+
     // Check the import status
     const statusCheckUrl = `https://api.github.com/repos/${owner}/${newRepoName}/import`;
     let importStatus;
@@ -46,6 +51,7 @@ async function migrateRepo(owner: string, repoName: string, accessToken: string,
         },
       });
       importStatus = statusResponse.data.status;
+      console.log(`Import status: ${importStatus}`);
       if (importStatus === 'complete') break;
       if (importStatus === 'error') {
         throw new Error('Repository import failed');
@@ -53,6 +59,8 @@ async function migrateRepo(owner: string, repoName: string, accessToken: string,
       // Wait for a few seconds before checking the status again
       await new Promise((resolve) => setTimeout(resolve, 5000));
     } while (importStatus !== 'complete');
+
+    console.log(`Repository import completed successfully`);
 
     return NextResponse.json({ success: true, newRepoUrl });
   } catch (error) {
