@@ -72,29 +72,56 @@ export default function ProjectPage({ params }: { params: { slug: string } }){
       setError('');
       setMessage('');
 
+      // Step 1: Create new repository
       const createRepoResponse = await axios.post('/api/createRepo', {
         accessToken: session.accessToken,
         owner,
         repoName: params.slug + '-unforked',
-        isPrivate: false, // Or true, depending on your requirement
+        isPrivate: false,
       });
 
-      if (createRepoResponse.data.success) {
-        const cloneAndPushResponse = await axios.post('/api/cloneAndPush', {
-          owner,
-          repoName: params.slug,
-          accessToken: session.accessToken,
-          newRepoUrl: createRepoResponse.data.repoUrl,
-        });
-
-        if (cloneAndPushResponse.data.success) {
-          setMessage('Repository successfully unforked!');
-        } else {
-          setError('Failed to clone and push to the new repository.');
-        }
-      } else {
+      if (!createRepoResponse.data.success) {
         setError('Failed to create new repository.');
+        setLoading(false);
+        return;
       }
+
+      // Step 2: Clone and push to new repository
+      const cloneAndPushResponse = await axios.post('/api/cloneAndPush', {
+        owner,
+        repoName: params.slug,
+        accessToken: session.accessToken,
+        newRepoUrl: createRepoResponse.data.repoUrl,
+      });
+
+      if (!cloneAndPushResponse.data.success) {
+        setError('Failed to clone and push to the new repository.');
+        setLoading(false);
+        return;
+      }
+
+      // Step 3: Delete the original repository
+      await axios.delete(`https://api.github.com/repos/${owner}/${params.slug}`, {
+        headers: {
+          Authorization: `Bearer ${session.accessToken}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      // Step 4: Rename the new repository
+      const renameRepoResponse = await axios.post('/api/renameRepo', {
+        owner,
+        oldRepoName: params.slug + '-unforked',
+        newRepoName: params.slug,
+        accessToken: session.accessToken,
+      });
+
+      if (renameRepoResponse.data.success) {
+        setMessage('Repository successfully unforked!');
+      } else {
+        setError('Failed to rename the new repository.');
+      }
+
       setLoading(false);
     } catch (error) {
       setError('An error occurred during the un-forking process.');
@@ -115,15 +142,15 @@ export default function ProjectPage({ params }: { params: { slug: string } }){
         <span>Back</span>
       </Link>
       <span className="font-bold text-xl">{params.slug}</span>
-      <div className="w-full flex flex-col items-center justify-center sm:items-start">
-        <CodeSnippet code={repoStructure} width="w-full" />
-        <button
+      <button
           onClick={handleUnFork}
           className="mt-4 bg-blue-500 text-white px-4 py-2 rounded"
         >
           Un-Fork Repository
-        </button>
-        {message && <p className="mt-4 text-green-500">{message}</p>}
+      </button>
+      {message && <p className="mt-4 text-green-500">{message}</p>}
+      <div className="w-full flex flex-col items-center justify-center sm:items-start">
+        <CodeSnippet code={repoStructure} width="w-full" />
       </div>
     </div>
   );

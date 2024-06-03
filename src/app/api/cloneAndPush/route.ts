@@ -7,25 +7,13 @@ const execPromise = promisify(exec);
 
 async function cloneAndPush(owner: string, repoName: string, accessToken: string, newRepoUrl: string) {
   const sourceRepoUrl = `https://github.com/${owner}/${repoName}.git`;
-  const cloneCmd = `git clone https://${accessToken}@github.com/${owner}/${repoName}.git repo`;
-  const changeDirCmd = `cd repo && `;
-  const removeRemoteCmd = `${changeDirCmd}git remote remove origin`;
-  const addRemoteCmd = `${changeDirCmd}git remote add origin ${newRepoUrl}`;
-  const pushCmd = `${changeDirCmd}git push origin master`;
+  const cloneCmd = `git clone --mirror ${sourceRepoUrl}`;
+  const changeDirCmd = `cd ${repoName}.git && `;
+  const pushCmd = `${changeDirCmd}git push --mirror ${newRepoUrl}`;
 
   try {
     await execPromise(cloneCmd);
-    await execPromise(removeRemoteCmd);
-    await execPromise(addRemoteCmd);
     await execPromise(pushCmd);
-
-    // Optional: Delete the original repo on GitHub
-    await axios.delete(`https://api.github.com/repos/${owner}/${repoName}`, {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        'Content-Type': 'application/json',
-      },
-    });
 
     return NextResponse.json({ success: true });
   } catch (error) {
