@@ -3,6 +3,7 @@ import axios from 'axios';
 
 async function createAndMigrateRepo(owner: string, repoName: string, accessToken: string, newRepoName: string) {
   try {
+    console.log('Starting repository creation...');
     // Step 1: Create new repository
     const createRepoResponse = await axios.post(
       'https://api.github.com/user/repos',
@@ -17,11 +18,13 @@ async function createAndMigrateRepo(owner: string, repoName: string, accessToken
         },
       }
     );
+    console.log('Repository creation response:', createRepoResponse.data);
 
     const newRepoUrl = createRepoResponse.data.clone_url;
 
     // Step 2: Use GitHub's Import API to migrate the repository
-    await axios.put(
+    console.log('Starting repository import...');
+    const importRepoResponse = await axios.put(
       `https://api.github.com/repos/${owner}/${newRepoName}/import`,
       {
         vcs: 'git',
@@ -34,6 +37,7 @@ async function createAndMigrateRepo(owner: string, repoName: string, accessToken
         },
       }
     );
+    console.log('Repository import response:', importRepoResponse.data);
 
     // Check the import status
     const statusCheckUrl = `https://api.github.com/repos/${owner}/${newRepoName}/import`;
@@ -46,6 +50,7 @@ async function createAndMigrateRepo(owner: string, repoName: string, accessToken
         },
       });
       importStatus = statusResponse.data.status;
+      console.log('Import status:', importStatus);
       if (importStatus === 'complete') break;
       if (importStatus === 'error') {
         throw new Error('Repository import failed');
@@ -58,6 +63,11 @@ async function createAndMigrateRepo(owner: string, repoName: string, accessToken
   } catch (error) {
     console.error('Error during repository migration:', error);
     if (axios.isAxiosError(error)) {
+      if (error.response) {
+        console.error('Error response data:', error.response.data);
+        console.error('Error response status:', error.response.status);
+        console.error('Error response headers:', error.response.headers);
+      }
       return NextResponse.json({ success: false, message: error.message });
     } else {
       return NextResponse.json({ success: false, message: 'An unknown error occurred' });
@@ -68,6 +78,7 @@ async function createAndMigrateRepo(owner: string, repoName: string, accessToken
 export async function POST(req: Request) {
   try {
     const { owner, repoName, accessToken, newRepoName } = await req.json();
+    console.log('Received request for repository migration:', { owner, repoName, newRepoName });
     return createAndMigrateRepo(owner, repoName, accessToken, newRepoName);
   } catch (error) {
     console.log('[CREATE_AND_MIGRATE_REPO_POST]', error);
