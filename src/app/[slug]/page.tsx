@@ -77,7 +77,7 @@ export default function ProjectPage({ params }: { params: { slug: string } }) {
       setMessage('');
 
       // Step 1: Create and migrate repository contents to the new repository
-      const migrateRepoResponse = await axios.post('/api/createAndMigrateRepo', {
+      const migrateRepoResponse = await axios.post('/api/migrateRepo', {
         owner,
         repoName: params.slug,
         accessToken: session.accessToken,
