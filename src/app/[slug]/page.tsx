@@ -8,18 +8,22 @@ import axios from 'axios';
 import { ArrowLeft } from 'lucide-react';
 import { useSession } from 'next-auth/react';
 
-const parseRepoData = (data: any[], prefix = '') => {
+interface RepoItem {
+  type: string;
+  name: string;
+  contents?: RepoItem[];
+}
+
+const parseRepoData = (data: RepoItem[], prefix = ''): string => {
   let structure = '';
 
-  data.forEach((item: { type: string; name: any; contents: any; }) => {
+  data.forEach((item) => {
     if (item.type === 'dir') {
-      // For directories
       structure += `${prefix}├── ${item.name}\n`;
       if (item.contents) {
         structure += parseRepoData(item.contents, prefix + '|   ');
       }
     } else {
-      // For files
       structure += `${prefix}|   ├── ${item.name}\n`;
     }
   });
@@ -27,7 +31,7 @@ const parseRepoData = (data: any[], prefix = '') => {
   return structure;
 };
 
-export default function ProjectPage({ params }: { params: { slug: string } }){
+export default function ProjectPage({ params }: { params: { slug: string } }) {
   const { data: session } = useSession();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -77,7 +81,7 @@ export default function ProjectPage({ params }: { params: { slug: string } }){
         owner,
         repoName: params.slug,
         accessToken: session.accessToken,
-        newRepoName: params.slug + '-delinked',
+        newRepoName: `${params.slug}-unforked`,
       });
 
       if (!migrateRepoResponse.data.success) {
@@ -87,27 +91,41 @@ export default function ProjectPage({ params }: { params: { slug: string } }){
       }
 
       // Step 2: Delete the original repository
-      await axios.delete(`https://api.github.com/repos/${owner}/${params.slug}`, {
-        headers: {
-          Authorization: `Bearer ${session.accessToken}`,
-          'Content-Type': 'application/json',
-        },
+      await axios.post('/api/deleteRepo', {
+        owner,
+        repoName: params.slug,
+        accessToken: session.accessToken,
       });
 
       // Step 3: Rename the new repository
       const renameRepoResponse = await axios.post('/api/renameRepo', {
         owner,
-        oldRepoName: params.slug + '-unforked',
+        oldRepoName: `${params.slug}-unforked`,
         newRepoName: params.slug,
         accessToken: session.accessToken,
       });
 
-      if (renameRepoResponse.data.success) {
-        setMessage('Repository successfully unforked!');
-      } else {
+      if (!renameRepoResponse.data.success) {
         setError('Failed to rename the new repository.');
+        setLoading(false);
+        return;
       }
 
+      // Step 4: Copy repository settings
+      const copyRepoSettingsResponse = await axios.post('/api/copyRepoSettings', {
+        owner,
+        oldRepoName: params.slug,
+        newRepoName: params.slug,
+        accessToken: session.accessToken,
+      });
+
+      if (!copyRepoSettingsResponse.data.success) {
+        setError('Failed to copy repository settings.');
+        setLoading(false);
+        return;
+      }
+
+      setMessage('Repository successfully unforked!');
       setLoading(false);
     } catch (error) {
       setError('An error occurred during the un-forking process.');
@@ -133,8 +151,8 @@ export default function ProjectPage({ params }: { params: { slug: string } }){
           className="mt-4 bg-blue-500 text-white px-4 py-2 rounded"
         >
           Un-Fork Repository
-      </button>
-      {message && <p className="mt-4 text-green-500">{message}</p>}
+        </button>
+        {message && <p className="mt-4 text-green-500">{message}</p>}
       <div className="w-full flex flex-col items-center justify-center sm:items-start">
         <CodeSnippet code={repoStructure} width="w-full" />
       </div>
