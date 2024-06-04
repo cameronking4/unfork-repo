@@ -77,7 +77,7 @@ export default function ProjectPage({ params }: { params: { slug: string } }) {
       setMessage('');
 
       // Step 1: Create and migrate repository contents to the new repository
-      const migrateRepoResponse = await axios.post('/api/migrateRepo', {
+      const migrateRepoResponse = await axios.post('/api/createAndMigrateRepo', {
         owner,
         repoName: params.slug,
         accessToken: session.accessToken,
@@ -91,11 +91,17 @@ export default function ProjectPage({ params }: { params: { slug: string } }) {
       }
 
       // Step 2: Delete the original repository
-      await axios.post('/api/deleteRepo', {
+      const deleteResponse = await axios.post('/api/deleteRepo', {
         owner,
         repoName: params.slug,
         accessToken: session.accessToken,
       });
+
+      if (!deleteResponse.data.success) {
+        setError(`Failed to delete the original repository. ${deleteResponse.data.message}`);
+        setLoading(false);
+        return;
+      }
 
       // Step 3: Rename the new repository
       const renameRepoResponse = await axios.post('/api/renameRepo', {
@@ -106,7 +112,7 @@ export default function ProjectPage({ params }: { params: { slug: string } }) {
       });
 
       if (!renameRepoResponse.data.success) {
-        setError('Failed to rename the new repository.');
+        setError(`Failed to rename the new repository. ${renameRepoResponse.data.message}`);
         setLoading(false);
         return;
       }
@@ -120,7 +126,7 @@ export default function ProjectPage({ params }: { params: { slug: string } }) {
       });
 
       if (!copyRepoSettingsResponse.data.success) {
-        setError('Failed to copy repository settings.');
+        setError(`Failed to copy repository settings. ${copyRepoSettingsResponse.data.message}`);
         setLoading(false);
         return;
       }
@@ -145,16 +151,16 @@ export default function ProjectPage({ params }: { params: { slug: string } }) {
         />
         <span>Back</span>
       </Link>
-      <button
+      <span className="font-bold text-xl">{params.slug}</span>
+      <div className="w-full flex flex-col items-center justify-center sm:items-start">
+        <CodeSnippet code={repoStructure} width="w-full" />
+        <button
           onClick={handleUnFork}
           className="mt-4 bg-blue-500 text-white px-4 py-2 rounded"
         >
           Un-Fork Repository
-       </button>
-       {message && <p className="mt-4 text-green-500">{message}</p>}
-      <span className="font-bold text-xl">{params.slug}</span>
-      <div className="w-full flex flex-col items-center justify-center sm:items-start">
-        <CodeSnippet code={repoStructure} width="w-full" />
+        </button>
+        {message && <p className="mt-4 text-green-500">{message}</p>}
       </div>
     </div>
   );
