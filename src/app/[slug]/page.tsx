@@ -76,7 +76,7 @@ export default function ProjectPage({ params }: { params: { slug: string } }) {
       setError('');
       setMessage('');
 
-      // Step 1: Migrate repository contents to the new repository
+      // Step 1: Create and migrate repository contents to the new repository
       const migrateRepoResponse = await axios.post('/api/migrateRepo', {
         owner,
         repoName: params.slug,
@@ -145,14 +145,14 @@ export default function ProjectPage({ params }: { params: { slug: string } }) {
         />
         <span>Back</span>
       </Link>
-      <span className="font-bold text-xl">{params.slug}</span>
       <button
           onClick={handleUnFork}
           className="mt-4 bg-blue-500 text-white px-4 py-2 rounded"
         >
           Un-Fork Repository
-        </button>
-        {message && <p className="mt-4 text-green-500">{message}</p>}
+       </button>
+       {message && <p className="mt-4 text-green-500">{message}</p>}
+      <span className="font-bold text-xl">{params.slug}</span>
       <div className="w-full flex flex-col items-center justify-center sm:items-start">
         <CodeSnippet code={repoStructure} width="w-full" />
       </div>
