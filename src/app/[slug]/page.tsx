@@ -120,7 +120,7 @@ export default function ProjectPage({ params }: { params: { slug: string } }) {
       // Step 4: Copy repository settings
       const copyRepoSettingsResponse = await axios.post('/api/copyRepoSettings', {
         owner,
-        oldRepoName: params.slug,
+        oldRepoName: `${params.slug}-unforked`,
         newRepoName: params.slug,
         accessToken: session.accessToken,
       });
