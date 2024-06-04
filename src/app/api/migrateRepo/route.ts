@@ -41,22 +41,40 @@ async function createRepoWithUniqueName(owner: string, accessToken: string, base
 }
 
 async function createAndMigrateRepo(owner: string, repoName: string, accessToken: string, newRepoName: string) {
+  const octokit = new Octokit({ auth: accessToken });
+  const tempRepoPath = path.join('/tmp', `temp-repo-${Date.now()}`);
+
   try {
     console.log('Starting repository creation...');
     const newRepoUrl = await createRepoWithUniqueName(owner, accessToken, newRepoName);
 
-    const tempRepoPath = path.join('/tmp', `temp-repo-${Date.now()}`);
-
-    // Step 2: Clone the original repository
+    // Step 2: Clone the original repository and read its contents
+    console.log('Cloning the original repository...');
     const git = simpleGit();
-    await git.clone(`https://github.com/${owner}/${repoName}.git`, tempRepoPath, ['--bare']);
+    await git.clone(`https://github.com/${owner}/${repoName}.git`, tempRepoPath);
 
-    // Step 3: Set the remote to the new repository
-    await git.cwd(tempRepoPath).removeRemote('origin');
-    await git.cwd(tempRepoPath).addRemote('origin', newRepoUrl);
+    console.log('Reading repository contents...');
+    const files = fs.readdirSync(tempRepoPath);
 
-    // Step 4: Push all branches and tags to the new repository
-    await git.cwd(tempRepoPath).push(['--mirror']);
+    // Step 3: Push the contents to the new repository
+    console.log('Pushing contents to the new repository...');
+    await git.cwd(tempRepoPath).addRemote('new-origin', newRepoUrl);
+    await git.cwd(tempRepoPath).push('new-origin', 'main', ['--force']); // Change 'main' if your default branch is different
+
+    // Step 4: Copy repository settings like description and topics
+    console.log('Copying repository settings...');
+    const { data: originalRepo } = await octokit.repos.get({
+      owner,
+      repo: repoName,
+    });
+
+    await octokit.repos.update({
+      owner,
+      repo: newRepoName,
+      description: originalRepo.description || "",
+      homepage: originalRepo.homepage || "",
+      topics: originalRepo.topics,
+    });
 
     // Clean up
     fs.rmSync(tempRepoPath, { recursive: true, force: true });
@@ -64,6 +82,12 @@ async function createAndMigrateRepo(owner: string, repoName: string, accessToken
     return NextResponse.json({ success: true, newRepoUrl });
   } catch (error) {
     console.error('Error during repository migration:', error);
+
+    // Clean up in case of error
+    if (fs.existsSync(tempRepoPath)) {
+      fs.rmSync(tempRepoPath, { recursive: true, force: true });
+    }
+
     if (axios.isAxiosError(error)) {
       if (error.response) {
         console.error('Error response data:', error.response.data);
