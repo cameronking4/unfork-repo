@@ -1,26 +1,45 @@
 import { NextResponse } from 'next/server';
 import axios from 'axios';
 
+async function createRepoWithUniqueName(owner: string, accessToken: string, baseRepoName: string) {
+  let attempt = 0;
+  let repoName = baseRepoName;
+
+  while (true) {
+    try {
+      const createRepoResponse = await axios.post(
+        'https://api.github.com/user/repos',
+        {
+          name: repoName,
+          private: false,
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+
+      console.log('Repository creation response:', createRepoResponse.data);
+      return createRepoResponse.data.clone_url;
+
+    } catch (error) {
+      if (axios.isAxiosError(error) && error.response && error.response.status === 422) {
+        console.log(`Repository name "${repoName}" already exists. Trying a different name...`);
+        attempt += 1;
+        repoName = `${baseRepoName}-${attempt}`;
+      } else {
+        throw error;
+      }
+    }
+  }
+}
+
 async function createAndMigrateRepo(owner: string, repoName: string, accessToken: string, newRepoName: string) {
   try {
     console.log('Starting repository creation...');
-    // Step 1: Create new repository
-    const createRepoResponse = await axios.post(
-      'https://api.github.com/user/repos',
-      {
-        name: newRepoName,
-        private: false,
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
-        },
-      }
-    );
-    console.log('Repository creation response:', createRepoResponse.data);
-
-    const newRepoUrl = createRepoResponse.data.clone_url;
+    const newRepoUrl = await createRepoWithUniqueName(owner, accessToken, newRepoName);
 
     // Step 2: Use GitHub's Import API to migrate the repository
     console.log('Starting repository import...');
@@ -37,6 +56,7 @@ async function createAndMigrateRepo(owner: string, repoName: string, accessToken
         },
       }
     );
+
     console.log('Repository import response:', importRepoResponse.data);
 
     // Check the import status
@@ -67,6 +87,9 @@ async function createAndMigrateRepo(owner: string, repoName: string, accessToken
         console.error('Error response data:', error.response.data);
         console.error('Error response status:', error.response.status);
         console.error('Error response headers:', error.response.headers);
+
+        // Return specific error details
+        return NextResponse.json({ success: false, message: error.response.data.message || error.message });
       }
       return NextResponse.json({ success: false, message: error.message });
     } else {
