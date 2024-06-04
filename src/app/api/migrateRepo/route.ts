@@ -20,7 +20,7 @@ async function createRepoWithUniqueName(owner: string, accessToken: string, base
       console.log('Repository creation response:', createRepoResponse.data);
       return createRepoResponse.data.clone_url;
     } catch (error) {
-      if (error.status === 422) {
+      if (error) {
         console.log(`Repository name "${repoName}" already exists. Trying a different name...`);
         attempt += 1;
         repoName = `${baseRepoName}-${attempt}`;
@@ -63,7 +63,7 @@ async function createAndPushReadme(owner: string, accessToken: string, newRepoNa
       fs.rmSync(tempRepoPath, { recursive: true, force: true });
     }
 
-    return NextResponse.json({ success: false, message: error.message });
+    return NextResponse.json({ success: false, message: error });
   }
 }
 
