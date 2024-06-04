@@ -1,206 +1,94 @@
 import { NextResponse } from 'next/server';
-import axios from 'axios';
+import { GithubProvider } from 'github-repository-provider';
+import { getSession } from 'next-auth/react';
 
-async function createGitHubActionWorkflow(owner: string, repoName: string, accessToken: string) {
-  const workflowContent = `
-name: Unfork Repository
-
-on:
-  workflow_dispatch:
-    inputs:
-      owner:
-        description: 'Owner of the original repository'
-        required: true
-      repoName:
-        description: 'Name of the original repository'
-        required: true
-      newRepoName:
-        description: 'Name of the new repository'
-        required: true
-      accessToken:
-        description: 'GitHub Personal Access Token'
-        required: true
-        type: string
-
-jobs:
-  unfork:
-    runs-on: ubuntu-latest
-
-    steps:
-    - name: Checkout source repository
-      uses: actions/checkout@v2
-      with:
-        repository: \${{ github.event.inputs.owner }}/\${{ github.event.inputs.repoName }}
-        token: \${{ github.event.inputs.accessToken }}
-
-    - name: Mirror-push to new repository
-      run: |
-        git remote add new-origin https://x-access-token:\${{ github.event.inputs.accessToken }}@github.com/\${{ github.event.inputs.owner }}/\${{ github.event.inputs.newRepoName }}.git
-        git push new-origin --mirror
-  `;
-
-  const filePath = '.github/workflows/unfork-repo.yml';
-  const fileContent = Buffer.from(workflowContent).toString('base64');
-
+async function createRepo(provider: { createRepository: (arg0: any, arg1: { owner: any; private: boolean; }) => any; }, owner: any, repoName: any) {
   try {
-    await axios.put(
-      `https://api.github.com/repos/${owner}/${repoName}/contents/${filePath}`,
-      {
-        message: 'Add unfork-repo workflow',
-        content: fileContent,
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
-          Accept: 'application/vnd.github.v3+json',
-        },
-      }
-    );
-
-    console.log('GitHub Action workflow file created successfully');
+    const repo = await provider.createRepository(repoName, {
+      owner,
+      private: true, // Change to false if you want the new repo to be public
+    });
+    return { success: true, data: repo };
   } catch (error) {
-    console.error('Error creating GitHub Action workflow file:', error);
-    throw error;
+    console.error('Error creating new repository:', error);
+    return { success: false, message: error };
   }
 }
 
-async function triggerUnforkAction(owner: string, repoName: string, accessToken: string, newRepoName: string) {
+async function copyRepoContents(provider: any, oldRepo: any[], newRepo: { writeEntry: (arg0: any) => any; }) {
   try {
-    const response = await axios.post(
-      `https://api.github.com/repos/${owner}/${repoName}/actions/workflows/unfork-repo.yml/dispatches`,
-      {
-        ref: 'main', // or the default branch
-        inputs: {
-          owner,
-          repoName,
-          newRepoName,
-          accessToken,
-        },
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
-          Accept: 'application/vnd.github.v3+json',
-        },
-      }
-    );
-
-    return { success: true };
-  } catch (error) {
-    console.error('Error triggering GitHub Action:', error);
-    if (axios.isAxiosError(error)) {
-      if (error.response) {
-        console.error('Error response data:', error.response.data);
-        console.error('Error response status:', error.response.status);
-        console.error('Error response headers:', error.response.headers);
-        return { success: false, message: error.response.data.message || error.message };
-      }
-      return { success: false, message: error.message };
-    } else {
-      return { success: false, message: 'An unknown error occurred' };
+    for await (const entry of oldRepo.entries('*')) {
+      await newRepo.writeEntry(entry);
     }
+    return { success: true };
+  } catch (error) {
+    console.error('Error copying repository contents:', error);
+    return { success: false, message: error };
   }
 }
 
-async function deleteRepo(accessToken: string, owner: string, repoName: string) {
+async function copyRepoSettings(provider: any, oldRepo: { attributes: { description: any; homepage: any; private: any; topics: any; }; }, newRepo: { update: (arg0: { description: any; homepage: any; private: any; topics: any; }) => any; }) {
   try {
-    await axios.delete(`https://api.github.com/repos/${owner}/${repoName}`, {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        'Content-Type': 'application/json',
-      },
-    });
+    const { description, homepage, private: isPrivate, topics } = oldRepo.attributes;
+    await newRepo.update({ description, homepage, private: isPrivate, topics });
     return { success: true };
   } catch (error) {
-    console.error('Error during repository deletion:', error);
-    return { success: false, message: JSON.stringify(error) };
+    console.error('Error copying repository settings:', error);
+    return { success: false, message: error };
   }
 }
 
-async function renameRepo(accessToken: string, owner: string, oldRepoName: string, newRepoName: string) {
+async function deleteRepo(provider: { deleteRepository: (arg0: any) => any; }, owner: any, repoName: any) {
   try {
-    await axios.patch(
-      `https://api.github.com/repos/${owner}/${oldRepoName}`,
-      { name: newRepoName },
-      {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
-        },
-      }
-    );
+    await provider.deleteRepository(repoName);
     return { success: true };
   } catch (error) {
-    console.error('Error during repository rename:', error);
-    return { success: false, message: JSON.stringify(error) };
-  }
-}
-
-async function copyRepoSettings(accessToken: string, owner: string, oldRepoName: string, newRepoName: string) {
-  try {
-    // Get the settings of the original repository
-    const repoSettingsResponse = await axios.get(`https://api.github.com/repos/${owner}/${oldRepoName}`, {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        'Content-Type': 'application/json',
-      },
-    });
-
-    const { description, homepage, private: isPrivate, topics } = repoSettingsResponse.data;
-
-    // Update the new repository with the settings
-    await axios.patch(
-      `https://api.github.com/repos/${owner}/${newRepoName}`,
-      { description, homepage, private: isPrivate, topics },
-      {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
-        },
-      }
-    );
-
-    return { success: true };
-  } catch (error) {
-    console.error('Error during copying repository settings:', error);
-    return { success: false, message: JSON.stringify(error) };
+    console.error('Error deleting repository:', error);
+    return { success: false, message: error };
   }
 }
 
 export async function POST(req: Request) {
   try {
-    const { owner, repoName, accessToken, newRepoName } = await req.json();
-    console.log('Received request for repository migration:', { owner, repoName, newRepoName });
-
-    await createGitHubActionWorkflow(owner, repoName, accessToken);
-
-    const triggerResponse = await triggerUnforkAction(owner, repoName, accessToken, newRepoName);
-    if (!triggerResponse.success) {
-      return NextResponse.json(triggerResponse);
+    const session = await getSession({ req });
+    if (!session) {
+      return new NextResponse('Unauthorized', { status: 401 });
     }
 
-    await new Promise((resolve) => setTimeout(resolve, 60000)); // Wait for the GitHub Action to complete
+    const { owner, repoName } = await req.json();
+    const accessToken = session.accessToken;
 
-    const deleteResponse = await deleteRepo(accessToken, owner, repoName);
-    if (!deleteResponse.success) {
-      return NextResponse.json(deleteResponse);
+    const config = {
+      token: accessToken,
+    };
+    const provider = new GithubProvider(config);
+    const oldRepo = await provider.repository(`${owner}/${repoName}`);
+
+    const createResponse = await createRepo(provider, owner, repoName);
+    if (!createResponse.success) {
+      return NextResponse.json(createResponse);
     }
 
-    const renameResponse = await renameRepo(accessToken, owner, newRepoName, repoName);
-    if (!renameResponse.success) {
-      return NextResponse.json(renameResponse);
+    const newRepo = createResponse.data;
+
+    const copyContentsResponse = await copyRepoContents(provider, oldRepo, newRepo);
+    if (!copyContentsResponse.success) {
+      return NextResponse.json(copyContentsResponse);
     }
 
-    const copySettingsResponse = await copyRepoSettings(accessToken, owner, repoName, repoName);
+    const copySettingsResponse = await copyRepoSettings(provider, oldRepo, newRepo);
     if (!copySettingsResponse.success) {
       return NextResponse.json(copySettingsResponse);
     }
 
+    const deleteResponse = await deleteRepo(provider, owner, repoName);
+    if (!deleteResponse.success) {
+      return NextResponse.json(deleteResponse);
+    }
+
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.log('[REPO_MIGRATION_POST]', error);
+    console.error('[DE_LINK_REPO_POST]', error);
     return new NextResponse('Internal Error', { status: 500 });
   }
 }
